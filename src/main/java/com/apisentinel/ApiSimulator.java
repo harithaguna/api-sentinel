@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Random;
 
 public class ApiSimulator {
-    private static final int MAX_RETRIES = 3;
     private static final int[] RESPONSE_CODES = { 200, 200, 200, 400, 500, 502, 503, 504 };
     private static final String[] API_NAMES = {
             "Payment API",
@@ -31,7 +30,9 @@ public class ApiSimulator {
     private static void processRequest(ApiRequest request) {
 
         int attempt = 0;
-        while (attempt <= MAX_RETRIES) {
+        RetryPolicy policy =getRetryPolicy(request.getApiName());
+        int maxRetries=policy.getMaxRetries();
+        while (attempt <=maxRetries ) {
             attempt++;
             int responseCode = simulateApiCall();
             request.setResponseCode(responseCode);
@@ -45,13 +46,13 @@ public class ApiSimulator {
             } else if (shouldRetry(responseCode)) {
                 request.setStatus("RETRYING");
                 System.out.println("Status: RETRYABLE FAILURE");
-                if (attempt > MAX_RETRIES) {
+                if (attempt > maxRetries) {
                     request.setStatus("DLQ");
                     System.out.println("Maximum retries reached.");
                     System.out.println("Status: MOVED TO DLQ");
                     break;
                 } else {
-                    int delaySeconds = calculateDelay(attempt);
+                    int delaySeconds =  policy.getInitialDelaySeconds()* (int) Math.pow(2, attempt - 1);
                     System.out.println("Retrying in " + delaySeconds + " seconds...");
                     waitBeforeRetry(delaySeconds);
                 }
@@ -75,11 +76,6 @@ public class ApiSimulator {
                 responseCode == 502 ||
                 responseCode == 503 ||
                 responseCode == 504;
-    }
-
-    private static int calculateDelay(int attempt) {
-
-        return (int) Math.pow(2, attempt - 1);
     }
 
     private static void waitBeforeRetry(int delaySeconds) {
@@ -113,7 +109,26 @@ public class ApiSimulator {
         System.out.println(
                 "Response Code: " + request.getResponseCode());
     }
+    private static RetryPolicy getRetryPolicy(String apiName) {
 
+    switch (apiName) {
+
+        case "Payment API":
+            return new RetryPolicy(3, 1);
+
+        case "User API":
+            return new RetryPolicy(2, 1);
+
+        case "Order API":
+            return new RetryPolicy(3, 2);
+
+        case "Notification API":
+            return new RetryPolicy(5, 1);
+
+        default:
+            return new RetryPolicy(3, 1);
+    }
+}
     private static void printFinalResult(ApiRequest request) {
 
         System.out.println();
