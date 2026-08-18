@@ -23,46 +23,127 @@ public class ApiSimulator {
             processRequest(request);
             requests.add(request);
             printFinalResult(request);
+            printAttemptHistory(request);
         }
         printSummary(requests);
     }
 
     private static void processRequest(ApiRequest request) {
 
-        int attempt = 0;
-        RetryPolicy policy =getRetryPolicy(request.getApiName());
-        int maxRetries=policy.getMaxRetries();
-        while (attempt <=maxRetries ) {
-            attempt++;
-            int responseCode = simulateApiCall();
-            request.setResponseCode(responseCode);
-            request.setAttemptCount(attempt);
-            printAttempt(request);
+    RetryPolicy policy =
+            getRetryPolicy(request.getApiName());
 
-            if (responseCode == 200) {
-                request.setStatus("SUCCESS");
-                System.out.println("Status: SUCCESS");
+    int maxRetries = policy.getMaxRetries();
+
+    int attempt = 0;
+
+    while (attempt <= maxRetries) {
+
+        // 1. Make API attempt
+        attempt++;
+
+        int responseCode = simulateApiCall();
+
+        request.setResponseCode(responseCode);
+        request.setAttemptCount(attempt);
+
+        printAttempt(request);
+
+
+        // 2. Handle the response
+        String attemptStatus;
+
+        if (responseCode == 200) {
+
+            // SUCCESS
+            attemptStatus = "SUCCESS";
+
+            request.setStatus("SUCCESS");
+
+            System.out.println("Status: SUCCESS");
+
+            request.addAttempt(
+                    new ApiAttempt(
+                            attempt,
+                            responseCode,
+                            attemptStatus
+                    )
+            );
+
+            break;
+
+        } else if (shouldRetry(responseCode)) {
+
+            // RETRYABLE FAILURE
+            attemptStatus = "RETRY";
+
+            request.setStatus("RETRYING");
+
+            System.out.println("Status: RETRYABLE FAILURE");
+
+            if (attempt > maxRetries) {
+
+                attemptStatus = "DLQ";
+
+                request.setStatus("DLQ");
+
+                System.out.println("Maximum retries reached.");
+                System.out.println("Status: MOVED TO DLQ");
+
+                request.addAttempt(
+                        new ApiAttempt(
+                                attempt,
+                                responseCode,
+                                attemptStatus
+                        )
+                );
+
                 break;
-            } else if (shouldRetry(responseCode)) {
-                request.setStatus("RETRYING");
-                System.out.println("Status: RETRYABLE FAILURE");
-                if (attempt > maxRetries) {
-                    request.setStatus("DLQ");
-                    System.out.println("Maximum retries reached.");
-                    System.out.println("Status: MOVED TO DLQ");
-                    break;
-                } else {
-                    int delaySeconds =  policy.getInitialDelaySeconds()* (int) Math.pow(2, attempt - 1);
-                    System.out.println("Retrying in " + delaySeconds + " seconds...");
-                    waitBeforeRetry(delaySeconds);
-                }
+
             } else {
-                request.setStatus("FAILED");
-                System.out.println("Status: PERMANENT FAILURE");
-                break;
+
+                request.addAttempt(
+                        new ApiAttempt(
+                                attempt,
+                                responseCode,
+                                attemptStatus
+                        )
+                );
+
+                int delaySeconds =
+                        policy.getInitialDelaySeconds()
+                        * (int) Math.pow(2, attempt - 1);
+
+                System.out.println(
+                        "Retrying in "
+                                + delaySeconds
+                                + " seconds..."
+                );
+
+                waitBeforeRetry(delaySeconds);
             }
+
+        } else {
+
+            // PERMANENT FAILURE
+            attemptStatus = "FAILED";
+
+            request.setStatus("FAILED");
+
+            System.out.println("Status: PERMANENT FAILURE");
+
+            request.addAttempt(
+                    new ApiAttempt(
+                            attempt,
+                            responseCode,
+                            attemptStatus
+                    )
+            );
+
+            break;
         }
     }
+}
 
     private static int simulateApiCall() {
         Random random = new Random();
@@ -145,7 +226,26 @@ public class ApiSimulator {
         System.out.println(
                 "Total Attempts: " + request.getAttemptCount());
     }
+    private static void printAttemptHistory(ApiRequest request) {
 
+    System.out.println();
+    System.out.println("ATTEMPT HISTORY");
+    System.out.println("----------------------------");
+
+    for (ApiAttempt attempt : request.getAttempts()) {
+
+       System.out.println(
+        "Attempt " +
+        attempt.getAttemptNumber() +
+        " | Time: " +
+        attempt.getTimestamp() +
+        " | Response: " +
+        attempt.getResponseCode() +
+        " | Status: " +
+        attempt.getStatus()
+);
+    }
+}
     private static void printSummary(List<ApiRequest> requests) {
         int success = 0;
         int failure = 0;
