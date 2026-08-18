@@ -1,14 +1,31 @@
 package com.apisentinel;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class ApiSimulator {
     private static final int MAX_RETRIES = 3;
-    private static final int[] RESPONSE_CODES = {200, 200, 200,400,500, 502, 503, 504};
+    private static final int[] RESPONSE_CODES = { 200, 200, 200, 400, 500, 502, 503, 504 };
+    private static final String[] API_NAMES = {
+            "Payment API",
+            "User API",
+            "Order API",
+            "Notification API"
+    };
+
     public static void main(String[] args) {
-        ApiRequest request = new ApiRequest("REQ-1001", "Payment API");
-        processRequest(request);
-        printFinalResult(request);
+        List<ApiRequest> requests = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            String reqId = "REQ-000" + i;
+            Random random = new Random();
+            String apiName=API_NAMES[random.nextInt(API_NAMES.length)];
+            ApiRequest request = new ApiRequest(reqId,apiName);
+            processRequest(request);
+            requests.add(request);
+            printFinalResult(request);
+        }
+        printSummary(requests);
     }
 
     private static void processRequest(ApiRequest request) {
@@ -112,5 +129,38 @@ public class ApiSimulator {
 
         System.out.println(
                 "Total Attempts: " + request.getAttemptCount());
+    }
+
+    private static void printSummary(List<ApiRequest> requests) {
+        int success = 0;
+        int failure = 0;
+        int dlq = 0;
+        int totalAttempts = 0;
+        for (ApiRequest request : requests) {
+            totalAttempts += request.getAttemptCount();
+            if ("SUCCESS".equals(request.getStatus())) {
+                success++;
+            } else if ("DLQ".equals(request.getStatus())) {
+                dlq++;
+            } else {
+                failure++;
+            }
+        }
+        int totalRequests = requests.size();
+        int totalRetries = totalAttempts - totalRequests;
+        double averageAttempts = totalAttempts * 1.0 / totalRequests;
+        double successRate = (success * 100.0) / totalRequests;
+        System.out.println();
+        System.out.println("================================");
+        System.out.println("API SENTINEL SUMMARY");
+        System.out.println("================================");
+        System.out.println("Total Requests: " + totalRequests);
+        System.out.println("Successful: " + success);
+        System.out.println("Failed: " + failure);
+        System.out.println("DLQ: " + dlq);
+        System.out.println("SUCESS RATE: " + String.format("%.2f", successRate) + "%");
+        System.out.println("Total Retries: " + totalRetries);
+        System.out.println("Average Attempts: " + averageAttempts);
+
     }
 }
