@@ -1,9 +1,9 @@
 package com.apisentinel;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-
+import java.util.HashMap;
+import java.util.Map;   
 public class ApiSimulator {
     private static final int[] RESPONSE_CODES = { 200, 200, 200, 400, 500, 502, 503, 504 };
     private static final String[] API_NAMES = {
@@ -15,53 +15,62 @@ public class ApiSimulator {
 
     public static void main(String[] args) {
 
-    RequestRepository repository =
-            new RequestRepository();
+        RequestRepository repository = new RequestRepository();
 
-    Random random = new Random();
-
-    for (int i = 1; i <= 5; i++) {
-
-        String requestId =
-                "REQ-" + String.format("%04d", i);
-
-        String apiName =
-                API_NAMES[random.nextInt(API_NAMES.length)];
-
-        ApiRequest request =
-                new ApiRequest(requestId, apiName);
-
-        processRequest(request);
-
-        repository.save(request);
-
-        printFinalResult(request);
-
-        printAttemptHistory(request);
-       
+        runSimulation(repository, 5);
     }
-     printSummary(repository.findAll());
-     List<ApiRequest> dlqRequests =
-        repository.findByStatus("DLQ");
 
-System.out.println();
-System.out.println("DLQ REQUESTS");
-System.out.println("----------------------------");
+    public static SimulationResult runSimulation(RequestRepository repository, int numberOfRequests) {
+        Random random = new Random();
 
-for (ApiRequest request : dlqRequests) {
+        for (int i = 1; i <= numberOfRequests; i++) {
 
-    System.out.println(
-            request.getRequestId()
-            + " | "
-            + request.getApiName()
-            + " | Attempts: "
-            + request.getAttemptCount()
-    );
-}
-}
+            String requestId = "REQ-" + String.format("%04d", i);
+
+            String apiName = API_NAMES[random.nextInt(API_NAMES.length)];
+
+            ApiRequest request = new ApiRequest(requestId, apiName);
+
+            processRequest(request);
+
+            repository.save(request);
+
+            printFinalResult(request);
+
+            printAttemptHistory(request);
+
+        }
+
+        SimulationResult result = createSummary(repository.findAll());
+
+printSummary(result);
+
+printApiMetrics(repository.findAll());
+
+        List<ApiRequest> dlqRequests = repository.findByStatus("DLQ");
+
+        System.out.println();
+        System.out.println("DLQ REQUESTS");
+        System.out.println("----------------------------");
+
+        for (ApiRequest request : dlqRequests) {
+
+            System.out.println(
+                    request.getRequestId()
+                            + " | "
+                            + request.getApiName()
+                            + " | Attempts: "
+                            + request.getAttemptCount());
+
+        }
+        return result;
+    }
+
     private static void processRequest(ApiRequest request) {
 
         RetryPolicy policy = getRetryPolicy(request.getApiName());
+
+        RetryService retryService = new RetryService(policy);
 
         int maxRetries = policy.getMaxRetries();
 
@@ -81,12 +90,9 @@ for (ApiRequest request : dlqRequests) {
 
             // 2. Handle the response
             String attemptStatus;
-
             if (responseCode == 200) {
 
-                // SUCCESS
                 attemptStatus = "SUCCESS";
-
                 request.setStatus("SUCCESS");
 
                 System.out.println("Status: SUCCESS");
@@ -99,56 +105,9 @@ for (ApiRequest request : dlqRequests) {
 
                 break;
 
-            } else if (shouldRetry(responseCode)) {
+            } else if (!retryService.isRetryable(responseCode)) {
 
-                // RETRYABLE FAILURE
-                attemptStatus = "RETRY";
-
-                request.setStatus("RETRYING");
-
-                System.out.println("Status: RETRYABLE FAILURE");
-
-                if (attempt > maxRetries) {
-
-                    attemptStatus = "DLQ";
-
-                    request.setStatus("DLQ");
-
-                    System.out.println("Maximum retries reached.");
-                    System.out.println("Status: MOVED TO DLQ");
-
-                    request.addAttempt(
-                            new ApiAttempt(
-                                    attempt,
-                                    responseCode,
-                                    attemptStatus));
-
-                    break;
-
-                } else {
-
-                    request.addAttempt(
-                            new ApiAttempt(
-                                    attempt,
-                                    responseCode,
-                                    attemptStatus));
-
-                    int delaySeconds = policy.getInitialDelaySeconds()
-                            * (int) Math.pow(2, attempt - 1);
-
-                    System.out.println(
-                            "Retrying in "
-                                    + delaySeconds
-                                    + " seconds...");
-
-                    waitBeforeRetry(delaySeconds);
-                }
-
-            } else {
-
-                // PERMANENT FAILURE
                 attemptStatus = "FAILED";
-
                 request.setStatus("FAILED");
 
                 System.out.println("Status: PERMANENT FAILURE");
@@ -160,6 +119,44 @@ for (ApiRequest request : dlqRequests) {
                                 attemptStatus));
 
                 break;
+
+            } else if (attempt > maxRetries) {
+
+                attemptStatus = "DLQ";
+                request.setStatus("DLQ");
+
+                System.out.println("Maximum retries reached.");
+                System.out.println("Status: MOVED TO DLQ");
+
+                request.addAttempt(
+                        new ApiAttempt(
+                                attempt,
+                                responseCode,
+                                attemptStatus));
+
+                break;
+
+            } else {
+
+                attemptStatus = "RETRY";
+                request.setStatus("RETRYING");
+
+                System.out.println("Status: RETRYABLE FAILURE");
+
+                request.addAttempt(
+                        new ApiAttempt(
+                                attempt,
+                                responseCode,
+                                attemptStatus));
+
+                int delaySeconds = retryService.getRetryDelaySeconds(attempt);
+
+                System.out.println(
+                        "Retrying in "
+                                + delaySeconds
+                                + " seconds...");
+
+                waitBeforeRetry(delaySeconds);
             }
         }
     }
@@ -167,15 +164,6 @@ for (ApiRequest request : dlqRequests) {
     private static int simulateApiCall() {
         Random random = new Random();
         return RESPONSE_CODES[random.nextInt(RESPONSE_CODES.length)];
-    }
-
-    private static boolean shouldRetry(int responseCode) {
-        return responseCode == 408 ||
-                responseCode == 429 ||
-                responseCode == 500 ||
-                responseCode == 502 ||
-                responseCode == 503 ||
-                responseCode == 504;
     }
 
     private static void waitBeforeRetry(int delaySeconds) {
@@ -268,13 +256,17 @@ for (ApiRequest request : dlqRequests) {
         }
     }
 
-    private static void printSummary(List<ApiRequest> requests) {
+    private static SimulationResult createSummary(List<ApiRequest> requests) {
+
         int success = 0;
         int failure = 0;
         int dlq = 0;
         int totalAttempts = 0;
+
         for (ApiRequest request : requests) {
+
             totalAttempts += request.getAttemptCount();
+
             if ("SUCCESS".equals(request.getStatus())) {
                 success++;
             } else if ("DLQ".equals(request.getStatus())) {
@@ -283,21 +275,115 @@ for (ApiRequest request : dlqRequests) {
                 failure++;
             }
         }
+
         int totalRequests = requests.size();
+
         int totalRetries = totalAttempts - totalRequests;
-        double averageAttempts = totalAttempts * 1.0 / totalRequests;
-        double successRate = (success * 100.0) / totalRequests;
+
+        double averageAttempts = totalRequests == 0
+                ? 0
+                : totalAttempts * 1.0 / totalRequests;
+
+        double successRate = totalRequests == 0
+                ? 0
+                : (success * 100.0) / totalRequests;
+
+        return new SimulationResult(
+                totalRequests,
+                success,
+                failure,
+                dlq,
+                successRate,
+                totalRetries,
+                averageAttempts);
+    }
+
+    private static void printSummary(SimulationResult result) {
+
         System.out.println();
         System.out.println("================================");
         System.out.println("API SENTINEL SUMMARY");
         System.out.println("================================");
-        System.out.println("Total Requests: " + totalRequests);
-        System.out.println("Successful: " + success);
-        System.out.println("Failed: " + failure);
-        System.out.println("DLQ: " + dlq);
-        System.out.println("SUCCESS RATE: " + String.format("%.2f", successRate) + "%");
-        System.out.println("Total Retries: " + totalRetries);
-        System.out.println("Average Attempts: " + averageAttempts);
 
+        System.out.println(
+                "Total Requests: " + result.getTotalRequests());
+
+        System.out.println(
+                "Successful: " + result.getSuccessful());
+
+        System.out.println(
+                "Failed: " + result.getFailed());
+
+        System.out.println(
+                "DLQ: " + result.getDlq());
+
+        System.out.println(
+                "SUCCESS RATE: "
+                        + String.format("%.2f", result.getSuccessRate())
+                        + "%");
+
+        System.out.println(
+                "Total Retries: " + result.getTotalRetries());
+
+        System.out.println(
+                "Average Attempts: "
+                        + result.getAverageAttempts());
     }
+
+private static void printApiMetrics(List<ApiRequest> requests) {
+
+    Map<String, ApiMetrics> metricsMap = new HashMap<>();
+
+    for (ApiRequest request : requests) {
+
+        String apiName = request.getApiName();
+
+        ApiMetrics metrics =
+                metricsMap.computeIfAbsent(
+                        apiName,
+                        ApiMetrics::new);
+
+        metrics.recordRequest(request);
+    }
+
+    System.out.println();
+    System.out.println("================================");
+    System.out.println("API PERFORMANCE");
+    System.out.println("================================");
+
+    for (ApiMetrics metrics : metricsMap.values()) {
+
+        System.out.println();
+        System.out.println(metrics.getApiName());
+        System.out.println("----------------------------");
+
+        System.out.println(
+                "Requests: "
+                        + metrics.getTotalRequests());
+
+        System.out.println(
+                "Successful: "
+                        + metrics.getSuccessful());
+
+        System.out.println(
+                "Failed: "
+                        + metrics.getFailed());
+
+        System.out.println(
+                "DLQ: "
+                        + metrics.getDlq());
+
+        System.out.println(
+                "Total Retries: "
+                        + metrics.getTotalRetries());
+
+        System.out.println(
+                "Success Rate: "
+                        + String.format(
+                                "%.2f",
+                                metrics.getSuccessRate())
+                        + "%");
+    }
+
+}
 }
