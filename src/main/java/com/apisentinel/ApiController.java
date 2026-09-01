@@ -12,12 +12,4 @@ public class ApiController {
     public String home() {
         return "API Sentinel is running!";
     }
-
-    @GetMapping("/simulate")
-    public SimulationResult simulate() {
-
-        RequestRepository repository = new RequestRepository();
-
-        return ApiSimulator.runSimulation(repository, 5);
-    }
 }
