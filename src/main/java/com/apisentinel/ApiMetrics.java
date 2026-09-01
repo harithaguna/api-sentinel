@@ -37,7 +37,7 @@ public class ApiMetrics {
             return 0;
         }
 
-        return successful * 100.0 / totalRequests;
+        return Math.round((successful * 100.0 / totalRequests) * 100.0) / 100.0;
     }
 
     public String getApiName() {
