@@ -1,47 +1,14 @@
 package com.apisentinel;
-import org.springframework.stereotype.Repository;
-import java.util.ArrayList;
+
 import java.util.List;
 
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
 @Repository
-public class RequestRepository {
+public interface RequestRepository extends JpaRepository<ApiRequest, Long> {
 
-    private List<ApiRequest> requests;
+    ApiRequest findByRequestId(String requestId);
 
-    public RequestRepository() {
-        requests = new ArrayList<>();
-    }
-
-    public void save(ApiRequest request) {
-        requests.add(request);
-    }
-
-    public List<ApiRequest> findAll() {
-        return requests;
-    }
-
-    public ApiRequest findById(String requestId) {
-
-        for (ApiRequest request : requests) {
-
-            if (request.getRequestId().equals(requestId)) {
-                return request;
-            }
-        }
-
-        return null;
-    }
-    public List<ApiRequest> findByStatus(String status) {
-
-    List<ApiRequest> results = new ArrayList<>();
-
-    for (ApiRequest request : requests) {
-
-        if (status.equals(request.getStatus())) {
-            results.add(request);
-        }
-    }
-
-    return results;
-}
+    List<ApiRequest> findByStatus(String status);
 }

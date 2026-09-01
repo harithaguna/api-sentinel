@@ -13,13 +13,6 @@ public class ApiSimulator {
             "Notification API"
     };
 
-    public static void main(String[] args) {
-
-        RequestRepository repository = new RequestRepository();
-
-        runSimulation(repository, 5);
-    }
-
     public static SimulationResult runSimulation(RequestRepository repository, int numberOfRequests) {
         Random random = new Random();
 

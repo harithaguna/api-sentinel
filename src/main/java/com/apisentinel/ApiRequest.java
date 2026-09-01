@@ -1,14 +1,34 @@
 package com.apisentinel;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+
+@Entity
 public class ApiRequest {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
     private String requestId;
     private String apiName;
     private int responseCode;
     private String status;
     private int attemptCount;
+
+    @OneToMany(cascade = CascadeType.ALL)
     private List<ApiAttempt> attempts;
+
+    protected ApiRequest() {
+        // Required by JPA
+    }
 
     public ApiRequest(String requestId, String apiName) {
         this.requestId = requestId;
@@ -22,6 +42,10 @@ public class ApiRequest {
 
     public List<ApiAttempt> getAttempts() {
         return attempts;
+    }
+
+    public Long getId() {
+        return id;
     }
 
     public String getRequestId() {
@@ -40,12 +64,12 @@ public class ApiRequest {
         return status;
     }
 
-    public void setResponseCode(int responseCode) {
-        this.responseCode = responseCode;
-    }
-
     public int getAttemptCount() {
         return attemptCount;
+    }
+
+    public void setResponseCode(int responseCode) {
+        this.responseCode = responseCode;
     }
 
     public void setStatus(String status) {
