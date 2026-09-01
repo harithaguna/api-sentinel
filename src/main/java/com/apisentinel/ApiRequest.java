@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.Column;
 
 @Entity
 public class ApiRequest {
@@ -17,13 +18,14 @@ public class ApiRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(unique = true, nullable = false)
     private String requestId;
     private String apiName;
     private int responseCode;
     private String status;
     private int attemptCount;
 
-    @OneToMany(cascade = CascadeType.ALL)
+    @OneToMany(mappedBy = "apiRequest", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ApiAttempt> attempts;
 
     protected ApiRequest() {
@@ -38,6 +40,7 @@ public class ApiRequest {
 
     public void addAttempt(ApiAttempt attempt) {
         attempts.add(attempt);
+        attempt.setApiRequest(this);
     }
 
     public List<ApiAttempt> getAttempts() {

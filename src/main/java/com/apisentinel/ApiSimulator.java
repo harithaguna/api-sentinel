@@ -15,10 +15,10 @@ public class ApiSimulator {
 
     public static SimulationResult runSimulation(RequestRepository repository, int numberOfRequests) {
         Random random = new Random();
-
+        long existingRequests = repository.count();
         for (int i = 1; i <= numberOfRequests; i++) {
 
-            String requestId = "REQ-" + String.format("%04d", i);
+            String requestId = "REQ-" + String.format("%04d", existingRequests + i);
 
             String apiName = API_NAMES[random.nextInt(API_NAMES.length)];
 

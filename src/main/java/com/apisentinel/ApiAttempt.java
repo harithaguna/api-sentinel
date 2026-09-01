@@ -6,6 +6,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 @Entity
 public class ApiAttempt {
@@ -18,6 +20,10 @@ public class ApiAttempt {
     private int responseCode;
     private String status;
     private LocalDateTime timestamp;
+
+    @ManyToOne
+    @JoinColumn(name = "api_request_id")
+    private ApiRequest apiRequest;
 
     protected ApiAttempt() {
         // Required by JPA
@@ -49,4 +55,8 @@ public class ApiAttempt {
     public String getStatus() {
         return status;
     }
+
+    public void setApiRequest(ApiRequest apiRequest) {
+    this.apiRequest = apiRequest;
+}
 }
